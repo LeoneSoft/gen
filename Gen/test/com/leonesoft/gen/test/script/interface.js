@@ -1,9 +1,12 @@
 /* 
  * Example of a user-define processing script
  * 
- *  Provides js implementations of the Processor interface, although not all methods
- *  should need to be implemented
+ * simply adds events to the global object
  *
  */
+
+gen.addEventListener("START", function(event, args) {
+    console.log(event.getName());
+});
 
 

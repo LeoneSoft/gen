@@ -8,10 +8,6 @@ package com.leonesoft.gen.data.processor;
  *
  * @author pete
  */
-public interface Processor {
-    boolean onInitialisation();
-    boolean onStart();
-    boolean onNextRecord();
-    boolean onEnd();
-    boolean onCompletion();
+public interface ProcessorEventHandler {
+    boolean call(ProcessorObject.ProcessorEvent event, Object[] args);
 }
