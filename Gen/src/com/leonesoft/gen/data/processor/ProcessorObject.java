@@ -20,7 +20,25 @@ public class ProcessorObject {
         END,
         COMPLETE,
         ERROR;
+        
+        private final static List<String> names;
+        
+        
+        
+        static {
+            names = new ArrayList<String>();
+            for(ProcessorEvent e : ProcessorEvent.values()) {
+                names.add(e.name());
+            }
+        }
+        
+        public static boolean contains(String name) {
+            return names.contains(name);
+        }
+        
     }
+    
+    private Map<String, Object> dataSources = new HashMap<String, Object>();
     
     private boolean fireEvent(ProcessorEvent event, Object[] args) {
        boolean result = true;
@@ -45,9 +63,34 @@ public class ProcessorObject {
         List<ProcessorEventHandler> handlers = initialiseMap(event);
         handlers.add(handler);
         return this;
-    };
+    }
     
     public ProcessorObject addEventListener(String name, ProcessorEventHandler handler) {
-        return addEventListener(ProcessorEvent.valueOf(name), handler);
+        if(ProcessorEvent.contains(name)) {
+            return addEventListener(ProcessorEvent.valueOf(name), handler);
+        }
+        throw new IllegalArgumentException(String.format("Event %s not supported", name));
+    }
+    
+    public ProcessorObject addInputDataSource(String name, String connectionString) {
+        return this;
+    }
+      
+    public void log(String message) {
+        System.out.println(message);
+    }
+    
+    public void run() {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                fireEvent(ProcessorEvent.START, null);
+                fireEvent(ProcessorEvent.NEXT_RECORD, null);
+                fireEvent(ProcessorEvent.END, null);
+                fireEvent(ProcessorEvent.COMPLETE, null);
+                fireEvent(ProcessorEvent.ERROR, null);
+            }
+        });
+        thread.start();
     }
 }
