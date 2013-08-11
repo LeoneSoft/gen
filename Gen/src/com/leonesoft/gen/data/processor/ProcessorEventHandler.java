@@ -9,5 +9,5 @@ package com.leonesoft.gen.data.processor;
  * @author pete
  */
 public interface ProcessorEventHandler {
-    boolean call(ProcessorObject.ProcessorEvent event, Object[] args);
+    boolean call(ProcessorObject.ProcessorEvent event, Object args);
 }

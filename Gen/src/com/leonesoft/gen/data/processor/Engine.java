@@ -4,14 +4,16 @@
  */
 package com.leonesoft.gen.data.processor;
 
-import java.io.FileInputStream;
+import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.FileReader;
+import java.sql.Driver;
+import java.sql.DriverManager;
+import java.util.Enumeration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.mozilla.javascript.*;
-import org.mozilla.javascript.ast.AstRoot;
+
+import javax.script.*;
 
 /**
  *
@@ -19,43 +21,48 @@ import org.mozilla.javascript.ast.AstRoot;
  */
 public class Engine implements Runnable {
     
-    String path;
+    File script;
+    String extension = "js";
     
     Engine(String scriptPath) {
-        path = scriptPath;
+        script = new File(scriptPath);        
+        if(!script.exists())
+            throw new IllegalArgumentException(String.format("file %s not found", script.toPath()));
+        int index = script.getName().lastIndexOf(".");
+        if(index != -1)
+            extension = script.getName().substring(index + 1);
     }
     
-    ProcessorObject gen = new ProcessorObject();
+    
     
     @Override
     public void run() {
-        FileInputStream stream = null;
+        
+        FileReader reader = null;
         try {
-            Context context = Context.enter();
-            stream = new FileInputStream(path);
-            InputStreamReader reader = new InputStreamReader(stream);
-            ScriptableObject scope = context.initStandardObjects();
-            Object jsOut = Context.javaToJS(gen, scope);
-            ScriptableObject.putProperty(scope, "gen", jsOut);
-            Script script = context.compileReader(reader, path, 0, null);
-            script.exec(context, scope);
+            reader = new FileReader(script);
         } catch (FileNotFoundException ex) {
             Logger.getLogger(Engine.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (IOException ex) {
-            Logger.getLogger(Engine.class.getName()).log(Level.SEVERE, null, ex);
-        } finally {
-            try {
-                if(stream != null)
-                    stream.close();
-            } catch (IOException ex) {
-                Logger.getLogger(Engine.class.getName()).log(Level.SEVERE, null, ex);
-            }
         }
-       
         
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByExtension(extension);
+        Compilable compilable = (Compilable) engine;
+        ScriptContext context = engine.getContext();
+        
+        ProcessorObject gen = new ProcessorObject();
+        
+        context.setAttribute("gen", gen, ScriptContext.ENGINE_SCOPE);
+        try {
+            CompiledScript compiledScript = compilable.compile(reader);
+            compiledScript.eval();
+        } catch (ScriptException ex) {
+            Logger.getLogger(Engine.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     public static void main(String[] args) {
+        
         Thread thread = new Thread(new Engine("/home/pete/NetBeansProjects/gen/gen/Gen/test/com/leonesoft/gen/test/script/interface.js"));
         thread.start();
         try {

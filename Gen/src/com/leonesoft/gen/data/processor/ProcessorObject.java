@@ -4,17 +4,28 @@
  */
 package com.leonesoft.gen.data.processor;
 
+import com.leonesoft.gen.data.DataSource;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 
 /**
  *
  * @author pete
  */
 public class ProcessorObject {
-    public enum ProcessorEvent {
+    public static enum ProcessorEvent {
         START,
         NEXT_RECORD,
         END,
@@ -38,9 +49,9 @@ public class ProcessorObject {
         
     }
     
-    private Map<String, Object> dataSources = new HashMap<String, Object>();
+    private Map<String, DataSource> dataSources = new HashMap<String, DataSource>();
     
-    private boolean fireEvent(ProcessorEvent event, Object[] args) {
+    private boolean fireEvent(ProcessorEvent event, Object args) {
        boolean result = true;
        if(handlerMap.containsKey(event)) {
            List<ProcessorEventHandler> handlers = handlerMap.get(event);
@@ -72,7 +83,17 @@ public class ProcessorObject {
         throw new IllegalArgumentException(String.format("Event %s not supported", name));
     }
     
-    public ProcessorObject addInputDataSource(String name, String connectionString) {
+    public ProcessorObject addInputDataSource(String name, String connectionString, String query) {
+        return addInputDataSource(name, connectionString, query, new Properties());
+    }
+        
+    public ProcessorObject addInputDataSource(String name, String connectionString, String query, Properties properties) {
+        DataSource source = new DataSource();
+        source.setName(name);
+        source.setConnectionString(connectionString);
+        source.setProperties(properties);
+        source.setDataQuery(query);
+        dataSources.put(name, source);
         return this;
     }
       
@@ -84,11 +105,54 @@ public class ProcessorObject {
         Thread thread = new Thread(new Runnable() {
             @Override
             public void run() {
-                fireEvent(ProcessorEvent.START, null);
-                fireEvent(ProcessorEvent.NEXT_RECORD, null);
-                fireEvent(ProcessorEvent.END, null);
-                fireEvent(ProcessorEvent.COMPLETE, null);
-                fireEvent(ProcessorEvent.ERROR, null);
+                for(DataSource source : dataSources.values()) {
+                    
+                    Connection connection = source.getConnection();
+                    if(connection == null) {
+                        String msg = String.format("Unable to create connection to '%s' DataSource", source.getName());
+                        Logger.getLogger(ProcessorObject.class.getName()).log(Level.SEVERE, msg);
+                        fireEvent(ProcessorEvent.ERROR, null);
+                        
+                        continue;
+                    }
+                    ResultSet results = null;
+                    try {
+                        Statement statement = connection.createStatement();
+                        results = statement.executeQuery(source.getDataQuery());
+                    } catch (SQLException ex) {
+                        String msg = String.format("Error occurred creating resultset from '%s' for '%s'", source.getDataQuery(), source.getName());
+                        Logger.getLogger(ProcessorObject.class.getName()).log(Level.SEVERE, msg, ex);
+                    }
+                    fireEvent(ProcessorEvent.START, null);
+                    if(results == null) {
+                        fireEvent(ProcessorEvent.ERROR, null);
+                        continue;
+                    }
+                    try {
+                        ResultSetMetaData metaData = results.getMetaData();
+                        int count = metaData.getColumnCount();
+                        Map<String, Object> list = new HashMap<>(count);
+                        while(results.next()) {
+                            
+                            for(int i = 1; i <= count; i++) {
+                                list.put(metaData.getColumnName(i), results.getObject(i));
+                            }
+                            fireEvent(ProcessorEvent.NEXT_RECORD, list);
+                            list.clear();
+                        }
+                    } catch (SQLException ex) {
+                        Logger.getLogger(ProcessorObject.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                    fireEvent(ProcessorEvent.END, null);
+                    try {
+                        connection.close();
+                    } catch (SQLException ex) {
+                        Logger.getLogger(ProcessorObject.class.getName()).log(Level.SEVERE, null, ex);
+                        fireEvent(ProcessorEvent.ERROR, null);
+                    }
+                    fireEvent(ProcessorEvent.COMPLETE, null);
+                    
+                }
             }
         });
         thread.start();
